@@ -50,7 +50,7 @@ int main()
 			tId.push_back(c);
 
 			int index = min(i1+1,fnum1.rows-1);
-			if(odoData.at<float>(index,1) > 0)
+			if(odoData.at<double>(index,1) > 0)
 			{
 				c++;
 			}
@@ -76,19 +76,53 @@ int main()
 	expsVec.push_back(exp);
 	expsVec.push_back(exp);
 
-
+	double vTrans, vRot;
+	int vtId;
 	for(int i1=0; i1<odoData.rows; i1++)
 	{
-		float vTrans = odoData.at<float>(i1,1);
-		float vRot = odoData.at<float>(i1,2);
-		int vtId = tId.at<int>(i1);
-
+		vTrans = odoData.at<double>(i1,1);
+		vRot = odoData.at<double>(i1,2);
+		vtId = tId.at<int>(i1);
+	
 		processExp(vtId,vTrans,vRot,expsVec);
 
+		vector<Point2f> expPoints;
+		for(int j1=1; j1<expsVec.size(); j1++)
+		{
+			Point2f p1;
+			p1.x = expsVec[j1].x_m;
+			p1.y = expsVec[j1].y_m;
+
+			expPoints.push_back(p1);
+		}
+
 		if(i1 % 10 == 0)
-			plotData();
+			plotData(expPoints);
 	}
 
+	for(int i1=0; i1<500; i1++)
+	{
+		processExp(vtId,vTrans,vRot,expsVec);
+	}
+
+	ofstream testExpsVals("expsData.txt");
+	vector<Point2f> expPoints2;
+
+	for(int i1=1; i1<expsVec.size(); i1++)
+	{
+		testExpsVals << expsVec[i1].x_m << endl;
+		expPoints2.push_back(Point2f(expsVec[i1].x_m,expsVec[i1].y_m));
+	}
+
+	Mat plotImg;
+	plotData(expPoints2,plotImg);
+	imshow("plot2",plotImg);
+	int key = waitKey(0);
+	if(key == 27)
+	{
+		cerr << "Esc key pressed, exiting..." << endl;
+		exit(-1);
+	}
 
 	getchar();
 }

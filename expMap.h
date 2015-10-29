@@ -4,6 +4,7 @@
 
 #include<opencv2\core.hpp>
 #include<opencv2\highgui.hpp>
+#include<opencv2\imgproc.hpp>
 
 using namespace std;
 using namespace cv;
@@ -13,15 +14,15 @@ using namespace cv;
 #define PI					CV_PI
 
 
-float accumDeltaX = 0, accumDeltaY = 0, accumDeltaFacing = 0;
-int numExps = 1, currentExpId = 1, previousExpId = 0, numVt = 1;
+double accumDeltaX = 0, accumDeltaY = 0, accumDeltaFacing = 0;
+int numExps = 1, currentExpId = 1, previousExpId = 0;
 Mat expHistory;
 
 struct link{
 	int expId;
-	float d;
-	float headingRad;
-	float facingRad;
+	double d;
+	double headingRad;
+	double facingRad;
 };
 
 /*!
@@ -30,9 +31,9 @@ struct link{
 class exps{
 
 public:
-	float x_m;
-	float y_m;
-	float facingRad;
+	double x_m;
+	double y_m;
+	double facingRad;
 	int vtId;
 	int numLinks;
 	vector<link> links;
@@ -56,7 +57,7 @@ Mat readCSV(ifstream& inputFile)
 		Mat rowMat;
 		while(getline(ss,elem,','))
 		{
-			rowMat.push_back(float(atof(&elem[0])));
+			rowMat.push_back(atof(&elem[0]));
 		}
 
 		if(dataMat.empty())
@@ -75,11 +76,11 @@ Mat readCSV(ifstream& inputFile)
 /*!
 @brief Adjusts the angle between 0 to 2*pi radians
 */
-float adjustAngle360(float angle)
+double adjustAngle360(double angle)
 {
-	if(angle < 0)
+	while(angle < 0)
 		angle += 2*PI;
-	else if(angle >= 2*PI)
+	while(angle >= 2*PI)
 		angle -= 2*PI;
 
 	return angle;
@@ -89,11 +90,11 @@ float adjustAngle360(float angle)
 /*!
 @brief Adjusts the angle between -pi to pi radians
 */
-float adjustAngle180(float angle)
+double adjustAngle180(double angle)
 {
-	if(angle > PI)
+	while(angle > PI)
 		angle -= 2*PI;
-	else if(angle <= -PI)
+	while(angle <= -PI)
 		angle += 2*PI;
 
 	return angle;
@@ -103,13 +104,13 @@ float adjustAngle180(float angle)
 /*!
 @breif Get the signed delta angle from angle1 to angle2 handling the wrap from 2*pi to 0.
 */
-float getSignedDeltaRad(float angle1, float angle2)
+double getSignedDeltaRad(double angle1, double angle2)
 {
-	float retAngle;
+	double retAngle;
 
-	float dir = adjustAngle180(angle2 - angle1);
+	double dir = adjustAngle180(angle2 - angle1);
 
-	float deltaAngle = abs( adjustAngle360(angle1) - adjustAngle360(angle2) );
+	double deltaAngle = abs( adjustAngle360(angle1) - adjustAngle360(angle2) );
 
 	if( deltaAngle < (2*PI - deltaAngle) )
 	{
@@ -135,18 +136,20 @@ float getSignedDeltaRad(float angle1, float angle2)
 void createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec)
 {
 	// Add link information to the current experience for the new experience
+	struct link newLink;
+	newLink.expId = numExps;
+	newLink.d = sqrt( pow(accumDeltaX,2) + pow(accumDeltaY,2) );
+	newLink.headingRad = atan2( accumDeltaY, accumDeltaX );
+	newLink.facingRad = accumDeltaFacing;
+
+	expsVec[currentExpId].links.push_back(newLink);
 	expsVec[currentExpId].numLinks++;
-	int linkId = expsVec[currentExpId].numLinks;
-	expsVec[currentExpId].links[linkId].expId = numExps;
-	expsVec[currentExpId].links[linkId].d = sqrt( pow(accumDeltaX,2) + pow(accumDeltaY,2) );
-	expsVec[currentExpId].links[linkId].headingRad = atan2( accumDeltaY, accumDeltaX );
-	expsVec[currentExpId].links[linkId].facingRad = accumDeltaFacing;
 
 	// Create new experience which will have no links to begin with
 	exps exp;
-	exp.vtId = numExps;
+	exp.vtId = vtId;
 	exp.x_m = expsVec[currentExpId].x_m	+ cos( expsVec[currentExpId].facingRad ) * accumDeltaX - sin( expsVec[currentExpId].facingRad ) * accumDeltaY;
-	exp.y_m = expsVec[currentExpId].y_m	+ sin( expsVec[currentExpId].facingRad ) * accumDeltaX - cos( expsVec[currentExpId].facingRad ) * accumDeltaY;
+	exp.y_m = expsVec[currentExpId].y_m	+ sin( expsVec[currentExpId].facingRad ) * accumDeltaX + cos( expsVec[currentExpId].facingRad ) * accumDeltaY;
 	exp.facingRad = adjustAngle180( expsVec[currentExpId].facingRad + accumDeltaFacing );
 	exp.numLinks = 0;
 
@@ -157,7 +160,7 @@ void createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec
 /*!
 @brief Processes the experience using the data available.
 */
-void processExp(int vtId, float vTrans, float vRot, vector<exps>& expsVec)
+void processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec)
 {
 	// Integrate the delta x, y and facing
 	accumDeltaFacing = adjustAngle180(accumDeltaFacing + vRot);
@@ -204,12 +207,14 @@ void processExp(int vtId, float vTrans, float vRot, vector<exps>& expsVec)
 				// If no link is found yet, then create a link between current experience and the experience for current vt
 				if(!linkExists)
 				{
+					struct link newLink;
+					newLink.expId = matchedExpId;
+					newLink.d = sqrt( pow(accumDeltaX,2) + pow(accumDeltaY,2) );
+					newLink.headingRad = atan2( accumDeltaY, accumDeltaX );
+					newLink.facingRad = accumDeltaFacing;
+
+					expsVec[currentExpId].links.push_back(newLink);
 					expsVec[currentExpId].numLinks++;
-					int linkId = expsVec[currentExpId].numLinks;
-					expsVec[currentExpId].links[linkId].expId = matchedExpId;
-					expsVec[currentExpId].links[linkId].d = sqrt( pow(accumDeltaX,2) + pow(accumDeltaY,2) );
-					expsVec[currentExpId].links[linkId].headingRad = atan2( accumDeltaY, accumDeltaX );
-					expsVec[currentExpId].links[linkId].facingRad = accumDeltaFacing;
 				}
 			}
 
@@ -225,7 +230,7 @@ void processExp(int vtId, float vTrans, float vRot, vector<exps>& expsVec)
 	// Do the experience map correction iteratively for all the links in all the experiences
 	for(int i1=0; i1<EXP_LOOPS; i1++)
 	{
-		for(int expID=0; expID<numExps; expID++)
+		for(int expID=1; expID<=numExps; expID++)
 		{
 			for(int linkID=0; linkID<expsVec[expID].numLinks; linkID++)
 			{
@@ -234,24 +239,24 @@ void processExp(int vtId, float vTrans, float vRot, vector<exps>& expsVec)
 				int e1 = expsVec[expID].links[linkID].expId;
 
 				// Work out where e0 thinks e1 (x,y) should be based on the stored link information
-				float lx = expsVec[e0].x_m + expsVec[e0].links[linkID].d * cos( expsVec[e0].facingRad + expsVec[e0].links[linkID].headingRad);
-				float ly = expsVec[e0].y_m + expsVec[e0].links[linkID].d * sin( expsVec[e0].facingRad + expsVec[e0].links[linkID].headingRad);
+				double lx = expsVec[e0].x_m + expsVec[e0].links[linkID].d * cos( expsVec[e0].facingRad + expsVec[e0].links[linkID].headingRad);
+				double ly = expsVec[e0].y_m + expsVec[e0].links[linkID].d * sin( expsVec[e0].facingRad + expsVec[e0].links[linkID].headingRad);
 			
 				// Correct e0 and e1 (x,y) by equal and opposite amounts, a 0.5 correction parameter means that 
 				// e0 and e1 will be fully corrected based on e0's link information.
-				expsVec[e0].x_m += ( ( expsVec[e1].x_m - lx ) *  (float)EXP_CORRECTION );
-				expsVec[e0].y_m += ( ( expsVec[e1].y_m - ly ) *  (float)EXP_CORRECTION );
-				expsVec[e1].x_m -= ( ( expsVec[e1].x_m - lx ) *  (float)EXP_CORRECTION );
-				expsVec[e1].y_m -= ( ( expsVec[e1].y_m - ly ) *  (float)EXP_CORRECTION );
+				expsVec[e0].x_m += ( ( expsVec[e1].x_m - lx ) *  EXP_CORRECTION );
+				expsVec[e0].y_m += ( ( expsVec[e1].y_m - ly ) *  EXP_CORRECTION );
+				expsVec[e1].x_m -= ( ( expsVec[e1].x_m - lx ) *  EXP_CORRECTION );
+				expsVec[e1].y_m -= ( ( expsVec[e1].y_m - ly ) *  EXP_CORRECTION );
 
 				// Determine the angle between where e0 thinks e1 is facing
 				// should be based on the link information
-				float df = getSignedDeltaRad( (expsVec[e0].facingRad + expsVec[e0].links[linkID].facingRad), expsVec[e1].facingRad );
+				double df = getSignedDeltaRad( (expsVec[e0].facingRad + expsVec[e0].links[linkID].facingRad), expsVec[e1].facingRad );
 
 				// Correct e0 and e1 facing by equal but opposite amounts, a 0.5 correction parameter means that
 				// e0 and e1 will be fully corrected based on e0's link information.
-				expsVec[e0].facingRad = adjustAngle180( expsVec[e0].facingRad + df * (float)EXP_CORRECTION );
-				expsVec[e1].facingRad = adjustAngle180( expsVec[e1].facingRad - df * (float)EXP_CORRECTION );
+				expsVec[e0].facingRad = adjustAngle180( expsVec[e0].facingRad + df * EXP_CORRECTION );
+				expsVec[e1].facingRad = adjustAngle180( expsVec[e1].facingRad - df * EXP_CORRECTION );
 			}
 		}
 	}
@@ -262,6 +267,50 @@ void processExp(int vtId, float vTrans, float vRot, vector<exps>& expsVec)
 /*!
 @brief Plots the experience on an image.
 */
-void plotData()
+void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
 {
+	plotImg = Mat(600,600,CV_8UC3,Scalar::all(255));
+
+	int verticalMargin = 50;
+	int horizMargin = 50;
+
+	int mulFactorX = plotImg.cols - 2 * horizMargin;
+	int mulFactorY = plotImg.rows - 2 * verticalMargin;
+
+	rectangle(plotImg,Rect(horizMargin,verticalMargin,mulFactorX,mulFactorY),Scalar(0,0,0),1,CV_AA);
+
+	Mat xPts, yPts;
+	for(int i1=0; i1<expPoints.size(); i1++)
+	{
+		xPts.push_back(expPoints[i1].x);
+		yPts.push_back(expPoints[i1].y);
+	}
+
+	double minVal, maxVal;
+	minMaxLoc(xPts, &minVal, &maxVal);
+	xPts.convertTo(xPts, CV_32FC1, 1.0 / (maxVal - minVal), (-1.0*minVal) / (maxVal - minVal));
+
+	minMaxLoc(yPts, &minVal, &maxVal);
+	yPts.convertTo(yPts, CV_32FC1, 1.0 / (maxVal - minVal), (-1.0*minVal) / (maxVal - minVal));
+
+	vector<Point2i> transPoints;
+	for(int i1=0; i1<xPts.rows; i1++)
+	{
+		Point2i p1;
+		p1.x = horizMargin + xPts.at<float>(i1) * mulFactorX;
+		p1.y = plotImg.rows - (verticalMargin + yPts.at<float>(i1) * mulFactorY);
+
+		circle(plotImg,p1,2,Scalar(255,0,0),-1,CV_AA);
+
+		transPoints.push_back(p1);
+	}
+	polylines(plotImg,transPoints,false,Scalar(255,0,0),1,CV_AA);
+
+	imshow("plot",plotImg);
+	int key = waitKey(100);
+	if(key == 27)
+	{
+		cerr << "Esc key pressed, exiting..." << endl;
+		exit(-1);
+	}
 }
