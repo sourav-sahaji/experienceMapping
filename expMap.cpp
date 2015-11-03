@@ -1,8 +1,5 @@
 #include"expMap.h"
 
-#define RENDER_FREQ			10		// Frequency at which plotting is done
-#define DRAW_LINKS			1		// Draw links
-
 int main()
 {
 	cout << "Starting experience mapping" << endl;
@@ -15,7 +12,6 @@ int main()
 	}
 
 	Mat odoData = readCSV(odoFile);
-
 
 	// Read the output matching result file
 	ifstream matchFile("fnums.txt");
@@ -42,7 +38,7 @@ int main()
 
 	// Generate virtual templates
 	Mat tId;
-	int c = 1;
+	int c = 0;
 	for(int i1=0; i1<fnum1.rows; i1++)
 	{
 		if(fi.at<int>(i1) == 0)
@@ -64,16 +60,17 @@ int main()
 	}
 
 	vector<exps> expsVec;
+	expMap expMap1;
 
 	// Create first experience which will have no links to begin with
 	exps exp;
-	exp.vtId = 1;
+	exp.vtId = 0;
 	exp.x_m = 0;
 	exp.y_m = 0;
 	exp.facingRad = 0.5*PI;
 	exp.numLinks = 0;
 
-	expsVec.push_back(exp);
+	//expsVec.push_back(exp);
 	expsVec.push_back(exp);
 
 	double vTrans, vRot;
@@ -84,10 +81,10 @@ int main()
 		vRot = odoData.at<double>(i1,2);
 		vtId = tId.at<int>(i1);
 	
-		processExp(vtId,vTrans,vRot,expsVec);
+		expMap1.processExp(vtId,vTrans,vRot,expsVec);
 
 		vector<Point2f> expPoints;
-		for(int j1=1; j1<expsVec.size(); j1++)
+		for(int j1=0; j1<expsVec.size(); j1++)
 		{
 			Point2f p1;
 			p1.x = expsVec[j1].x_m;
@@ -96,19 +93,19 @@ int main()
 			expPoints.push_back(p1);
 		}
 
-		if(i1 % 10 == 0)
+		if(i1 % RENDER_FREQ == 0)
 			plotData(expPoints);
 	}
 
 	for(int i1=0; i1<500; i1++)
 	{
-		processExp(vtId,vTrans,vRot,expsVec);
+		expMap1.processExp(vtId,vTrans,vRot,expsVec);
 	}
 
 	ofstream testExpsVals("expsData.txt");
 	vector<Point2f> expPoints2;
 
-	for(int i1=1; i1<expsVec.size(); i1++)
+	for(int i1=0; i1<expsVec.size(); i1++)
 	{
 		testExpsVals << expsVec[i1].x_m << endl;
 		expPoints2.push_back(Point2f(expsVec[i1].x_m,expsVec[i1].y_m));

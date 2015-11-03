@@ -9,14 +9,11 @@
 using namespace std;
 using namespace cv;
 
+#define RENDER_FREQ			10		// Frequency at which plotting is done
 #define EXP_LOOPS			10
 #define EXP_CORRECTION		0.5
 #define PI					CV_PI
 
-
-double accumDeltaX = 0, accumDeltaY = 0, accumDeltaFacing = 0;
-int numExps = 1, currentExpId = 1, previousExpId = 0;
-Mat expHistory;
 
 struct link{
 	int expId;
@@ -26,57 +23,43 @@ struct link{
 };
 
 /*!
-@brief A class for describing an experience in the map.
+@brief A structure for describing an experience in the map.
 */
-class exps{
-
-public:
+struct exps{
 	double x_m;
 	double y_m;
 	double facingRad;
 	int vtId;
 	int numLinks;
 	vector<link> links;
-
-	//exps(): x_m(0), y_m(0), facingRad(PI/2.0), vtId(1), numLinks(0) {}
-
 };
 
 /*!
-@brief Reads CSV file into OpenCV matrix
-@return Returns the Matrix
+@brief The experience mapping class
 */
-Mat readCSV(ifstream& inputFile)
-{
-	Mat dataMat;
-	string buffer;
-	while(getline(inputFile,buffer))
-	{
-		stringstream ss(buffer);
-		string elem;
-		Mat rowMat;
-		while(getline(ss,elem,','))
-		{
-			rowMat.push_back(atof(&elem[0]));
-		}
+class expMap{
 
-		if(dataMat.empty())
-		{
-			dataMat.push_back(rowMat);
-			dataMat = dataMat.t();
-		}
-		else
-		{
-			vconcat(dataMat,rowMat.t(),dataMat);
-		}
-	}
-	return dataMat;
-}
+private:
+	double accumDeltaX, accumDeltaY, accumDeltaFacing;
+	int numExps, currentExpId, previousExpId;
+	Mat expHistory;
+
+public:
+	expMap(): accumDeltaX(0), accumDeltaY(0), accumDeltaFacing(0), numExps(0), currentExpId(0), previousExpId(0) {};
+
+	double adjustAngle360(double angle);
+	double adjustAngle180(double angle);
+	double getSignedDeltaRad(double angle1, double angle2);
+	void createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec);
+	void processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec);
+
+};
+
 
 /*!
 @brief Adjusts the angle between 0 to 2*pi radians
 */
-double adjustAngle360(double angle)
+double expMap::adjustAngle360(double angle)
 {
 	while(angle < 0)
 		angle += 2*PI;
@@ -90,7 +73,7 @@ double adjustAngle360(double angle)
 /*!
 @brief Adjusts the angle between -pi to pi radians
 */
-double adjustAngle180(double angle)
+double expMap::adjustAngle180(double angle)
 {
 	while(angle > PI)
 		angle -= 2*PI;
@@ -104,7 +87,7 @@ double adjustAngle180(double angle)
 /*!
 @breif Get the signed delta angle from angle1 to angle2 handling the wrap from 2*pi to 0.
 */
-double getSignedDeltaRad(double angle1, double angle2)
+double expMap::getSignedDeltaRad(double angle1, double angle2)
 {
 	double retAngle;
 
@@ -133,7 +116,7 @@ double getSignedDeltaRad(double angle1, double angle2)
 /*!
 @brief Creates a new experience
 */
-void createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec)
+void expMap::createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec)
 {
 	// Add link information to the current experience for the new experience
 	struct link newLink;
@@ -160,7 +143,7 @@ void createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec
 /*!
 @brief Processes the experience using the data available.
 */
-void processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec)
+void expMap::processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec)
 {
 	// Integrate the delta x, y and facing
 	accumDeltaFacing = adjustAngle180(accumDeltaFacing + vRot);
@@ -230,7 +213,7 @@ void processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec)
 	// Do the experience map correction iteratively for all the links in all the experiences
 	for(int i1=0; i1<EXP_LOOPS; i1++)
 	{
-		for(int expID=1; expID<=numExps; expID++)
+		for(int expID=0; expID<=numExps; expID++)
 		{
 			for(int linkID=0; linkID<expsVec[expID].numLinks; linkID++)
 			{
@@ -264,21 +247,59 @@ void processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec)
 	expHistory.push_back(currentExpId);
 }
 
+
+/*!
+@brief Reads CSV file into OpenCV matrix
+@return Returns the Matrix
+*/
+Mat readCSV(ifstream& inputFile)
+{
+	Mat dataMat;
+	string buffer;
+	while(getline(inputFile,buffer))
+	{
+		stringstream ss(buffer);
+		string elem;
+		Mat rowMat;
+		while(getline(ss,elem,','))
+		{
+			rowMat.push_back(atof(&elem[0]));
+		}
+
+		if(dataMat.empty())
+		{
+			dataMat.push_back(rowMat);
+			dataMat = dataMat.t();
+		}
+		else
+		{
+			vconcat(dataMat,rowMat.t(),dataMat);
+		}
+	}
+	return dataMat;
+}
+
+
 /*!
 @brief Plots the experience on an image.
 */
 void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
 {
+	// Set the image size to contain the plot (major container)
 	plotImg = Mat(600,600,CV_8UC3,Scalar::all(255));
 
+	// Set the margins as empty space around the plot (around minor container)
 	int verticalMargin = 50;
 	int horizMargin = 50;
 
+	// Calculate the multiplying factor for translation of the values to be plotted
 	int mulFactorX = plotImg.cols - 2 * horizMargin;
 	int mulFactorY = plotImg.rows - 2 * verticalMargin;
 
+	// Draw the minor container
 	rectangle(plotImg,Rect(horizMargin,verticalMargin,mulFactorX,mulFactorY),Scalar(0,0,0),1,CV_AA);
 
+	// Set the range of points to be plotted within 0 to 1
 	Mat xPts, yPts;
 	for(int i1=0; i1<expPoints.size(); i1++)
 	{
@@ -293,19 +314,28 @@ void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
 	minMaxLoc(yPts, &minVal, &maxVal);
 	yPts.convertTo(yPts, CV_32FC1, 1.0 / (maxVal - minVal), (-1.0*minVal) / (maxVal - minVal));
 
-	vector<Point2i> transPoints;
+	// Calculate the new points translated to the plot container (major) and plot them
+	vector<Point2i> transPoints;			// Translated points
 	for(int i1=0; i1<xPts.rows; i1++)
 	{
 		Point2i p1;
 		p1.x = horizMargin + xPts.at<float>(i1) * mulFactorX;
+		
+		// Invert the y axis
 		p1.y = plotImg.rows - (verticalMargin + yPts.at<float>(i1) * mulFactorY);
 
+		// Thickness set to -1 for filled circles
 		circle(plotImg,p1,2,Scalar(255,0,0),-1,CV_AA);
 
 		transPoints.push_back(p1);
 	}
+
+	// Draw the polygon joining the points in sequential order
 	polylines(plotImg,transPoints,false,Scalar(255,0,0),1,CV_AA);
 
+
+
+	// Display the plot
 	imshow("plot",plotImg);
 	int key = waitKey(100);
 	if(key == 27)
