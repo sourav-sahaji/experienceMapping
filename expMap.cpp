@@ -1,5 +1,7 @@
 #include"expMap.h"
 
+#define FAKE_ODOM			1		// Generate virtual odometry data and overwrite the file read
+
 int main()
 {
 	cout << "Starting experience mapping" << endl;
@@ -9,15 +11,20 @@ int main()
 	if(!odoFile)
 	{
 		cerr << "Odometry Data File not found!" << endl;
+		getchar();
+		exit(-1);
 	}
 
 	Mat odoData = readCSV(odoFile);
 
+
 	// Read the output matching result file
-	ifstream matchFile("fnums.txt");
+	ifstream matchFile("matchResult.txt");
 	if(!matchFile)
 	{
 		cerr << "Match Result File not found!" << endl;
+		getchar();
+		exit(-1);
 	}
 
 	Mat dataMat = readCSV(matchFile);
@@ -33,12 +40,21 @@ int main()
 
 	dataMat.release();
 
+#if(FAKE_ODOM == 1)
+	Mat transVelMat = Mat::ones(fnum1.rows,1,CV_64FC1);
+	Mat rotVelMat = Mat(fnum1.rows,1,CV_64FC1,Scalar::all(0.03));
+	odoData.release();
+	fnum1.convertTo(odoData,CV_64FC1);
+	hconcat(odoData,transVelMat,odoData);
+	hconcat(odoData,rotVelMat,odoData);
+#endif
 
 	ofstream tidfile("tid.txt");
 
 	// Generate virtual templates
 	Mat tId;
 	int c = 0;
+
 	for(int i1=0; i1<fnum1.rows; i1++)
 	{
 		if(fi.at<int>(i1) == 0)
@@ -54,7 +70,8 @@ int main()
 		else
 		{
 			int index = fnum2.at<int>(i1);
-			tId.push_back(tId.at<int>(index));
+			int val = tId.at<int>(index);
+			tId.push_back(val);
 		}
 		tidfile << tId.at<int>(i1) << endl;
 	}
