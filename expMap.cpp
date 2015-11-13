@@ -1,13 +1,14 @@
 #include"expMap.h"
 
-#define FAKE_ODOM			1		// Generate virtual odometry data and overwrite the file read
+#define FAKE_ODOM			0		// Generate virtual odometry data and overwrite the file read
+#define LOOP_OPEN			0		// Do not consider any loop closures
 
 int main()
 {
 	cout << "Starting experience mapping" << endl;
 
 	// Read the odometery data file
-	ifstream odoFile("velocities2.csv");
+	ifstream odoFile("velocities.txt");
 	if(!odoFile)
 	{
 		cerr << "Odometry Data File not found!" << endl;
@@ -57,7 +58,7 @@ int main()
 
 	for(int i1=0; i1<fnum1.rows; i1++)
 	{
-		if(fi.at<int>(i1) == 0)
+		if(fi.at<int>(i1) == 0 || LOOP_OPEN)
 		{
 			tId.push_back(c);
 
@@ -76,19 +77,7 @@ int main()
 		tidfile << tId.at<int>(i1) << endl;
 	}
 
-	vector<exps> expsVec;
 	expMap expMap1;
-
-	// Create first experience which will have no links to begin with
-	exps exp;
-	exp.vtId = 0;
-	exp.x_m = 0;
-	exp.y_m = 0;
-	exp.facingRad = 0.5*PI;
-	exp.numLinks = 0;
-
-	//expsVec.push_back(exp);
-	expsVec.push_back(exp);
 
 	double vTrans, vRot;
 	int vtId;
@@ -98,14 +87,14 @@ int main()
 		vRot = odoData.at<double>(i1,2);
 		vtId = tId.at<int>(i1);
 	
-		expMap1.processExp(vtId,vTrans,vRot,expsVec);
+		expMap1.processExp(vtId,vTrans,vRot);
 
 		vector<Point2f> expPoints;
-		for(int j1=0; j1<expsVec.size(); j1++)
+		for(int j1=0; j1<expMap1.expsVec.size(); j1++)
 		{
 			Point2f p1;
-			p1.x = expsVec[j1].x_m;
-			p1.y = expsVec[j1].y_m;
+			p1.x = expMap1.expsVec[j1].x_m;
+			p1.y = expMap1.expsVec[j1].y_m;
 
 			expPoints.push_back(p1);
 		}
@@ -116,21 +105,22 @@ int main()
 
 	for(int i1=0; i1<500; i1++)
 	{
-		expMap1.processExp(vtId,vTrans,vRot,expsVec);
+		expMap1.processExp(vtId,vTrans,vRot);
 	}
 
 	ofstream testExpsVals("expsData.txt");
 	vector<Point2f> expPoints2;
 
-	for(int i1=0; i1<expsVec.size(); i1++)
+	for(int i1=0; i1<expMap1.expsVec.size(); i1++)
 	{
-		testExpsVals << expsVec[i1].x_m << endl;
-		expPoints2.push_back(Point2f(expsVec[i1].x_m,expsVec[i1].y_m));
+		testExpsVals << expMap1.expsVec[i1].x_m << endl;
+		expPoints2.push_back(Point2f(expMap1.expsVec[i1].x_m,expMap1.expsVec[i1].y_m));
 	}
 
 	Mat plotImg;
 	plotData(expPoints2,plotImg);
 	imshow("plot2",plotImg);
+	imwrite("map.png",plotImg);
 	int key = waitKey(0);
 	if(key == 27)
 	{

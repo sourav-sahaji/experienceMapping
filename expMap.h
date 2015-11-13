@@ -45,13 +45,19 @@ private:
 	Mat expHistory;
 
 public:
-	expMap(): accumDeltaX(0), accumDeltaY(0), accumDeltaFacing(0), numExps(0), currentExpId(0), previousExpId(0) {};
+	vector<exps> expsVec;
 
+	expMap(): accumDeltaX(0), accumDeltaY(0), accumDeltaFacing(0), numExps(0), currentExpId(0), previousExpId(0) 
+	{
+		exps exp = {0, 0, PI, 0, 0};
+		expsVec.push_back(exp);
+	};
+	
 	double adjustAngle360(double angle);
 	double adjustAngle180(double angle);
 	double getSignedDeltaRad(double angle1, double angle2);
-	void createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec);
-	void processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec);
+	void createNewExp(int currentExpId, int numExps, int vtId);
+	void processExp(int vtId, double vTrans, double vRot);
 
 };
 
@@ -116,7 +122,7 @@ double expMap::getSignedDeltaRad(double angle1, double angle2)
 /*!
 @brief Creates a new experience
 */
-void expMap::createNewExp(int currentExpId, int numExps, int vtId, vector<exps>& expsVec)
+void expMap::createNewExp(int currentExpId, int numExps, int vtId)
 {
 	// Add link information to the current experience for the new experience
 	struct link newLink;
@@ -143,7 +149,7 @@ void expMap::createNewExp(int currentExpId, int numExps, int vtId, vector<exps>&
 /*!
 @brief Processes the experience using the data available.
 */
-void expMap::processExp(int vtId, double vTrans, double vRot, vector<exps>& expsVec)
+void expMap::processExp(int vtId, double vTrans, double vRot)
 {
 	// Integrate the delta x, y and facing
 	accumDeltaFacing = adjustAngle180(accumDeltaFacing + vRot);
@@ -156,7 +162,7 @@ void expMap::processExp(int vtId, double vTrans, double vRot, vector<exps>& exps
 		numExps++;
 
 		// Create a new experience
-		createNewExp(currentExpId,numExps,vtId,expsVec);
+		createNewExp(currentExpId,numExps,vtId);
 
 		previousExpId = currentExpId;
 		currentExpId = numExps;
@@ -286,11 +292,11 @@ Mat readCSV(ifstream& inputFile)
 void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
 {
 	// Set the image size to contain the plot (major container)
-	plotImg = Mat(600,600,CV_8UC3,Scalar::all(255));
+	plotImg = Mat(400,400,CV_8UC3,Scalar::all(255));
 
 	// Set the margins as empty space around the plot (around minor container)
-	int verticalMargin = 50;
-	int horizMargin = 50;
+	int verticalMargin = 10;
+	int horizMargin = 10;
 
 	// Calculate the multiplying factor for translation of the values to be plotted
 	int mulFactorX = plotImg.cols - 2 * horizMargin;
@@ -333,14 +339,16 @@ void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
 	// Draw the polygon joining the points in sequential order
 	polylines(plotImg,transPoints,false,Scalar(255,0,0),1,CV_AA);
 
+	circle(plotImg,transPoints[transPoints.size()-1],8,Scalar(0,0,255),2,CV_AA);
+
 
 
 	// Display the plot
-	imshow("plot",plotImg);
-	int key = waitKey(100);
-	if(key == 27)
-	{
-		cerr << "Esc key pressed, exiting..." << endl;
-		exit(-1);
-	}
+	//imshow("plot",plotImg);
+	//int key = waitKey(100);
+	//if(key == 27)
+	//{
+	//	cerr << "Esc key pressed, exiting..." << endl;
+	//	exit(-1);
+	//}
 }
