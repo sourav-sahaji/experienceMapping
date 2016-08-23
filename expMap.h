@@ -2,9 +2,9 @@
 #include<iostream>
 #include<fstream>
 
-#include<opencv2\core.hpp>
-#include<opencv2\highgui.hpp>
-#include<opencv2\imgproc.hpp>
+#include<opencv2/core.hpp>
+#include<opencv2/highgui.hpp>
+#include<opencv2/imgproc.hpp>
 
 using namespace std;
 using namespace cv;
@@ -289,7 +289,7 @@ Mat readCSV(ifstream& inputFile)
 /*!
 @brief Plots the experience on an image.
 */
-void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
+void plotData(vector<Point2f> expPoints, Mat& plotImg)
 {
 	// Set the image size to contain the plot (major container)
 	plotImg = Mat(400,400,CV_8UC3,Scalar::all(255));
@@ -351,4 +351,35 @@ void plotData(vector<Point2f> expPoints, Mat& plotImg = Mat())
 	//	cerr << "Esc key pressed, exiting..." << endl;
 	//	exit(-1);
 	//}
+}
+
+/*!
+@brief Reads input data file into OpenCV matrix
+@return Returns the Matrix
+*/
+cv::Mat readDataFile(std::ifstream& inputFile, char delimiter)
+{
+    cv::Mat dataMat;
+    std::string buffer;
+    while(std::getline(inputFile,buffer))
+    {
+        std::stringstream ss(buffer);
+        std::string elem;
+        cv::Mat rowMat;
+        while(std::getline(ss,elem,delimiter))
+        {
+            rowMat.push_back(atof(&elem[0]));
+        }
+
+        if(dataMat.empty())
+        {
+            dataMat.push_back(rowMat);
+            dataMat = dataMat.t();
+        }
+        else
+        {
+            cv::vconcat(dataMat,rowMat.t(),dataMat);
+        }
+    }
+    return dataMat;
 }
